@@ -1,26 +1,29 @@
 import { AlertProps } from "@/types";
 import React, { useEffect, useState } from "react";
 
-function GameAlert({ text, subText, isTop = false }: AlertProps) {
+function GameAlert({ text, subText, isTop = false, delay = 0 }: AlertProps) {
   const [isVisible, setIsVisible] = useState(true);
   const alertRef = React.useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (alertRef.current) {
-      alertRef.current.style.transform = `translate(-50%, ${
-        isTop ? "100px" : "-144px"
-      }) scale(1)`;
+      setTimeout(() => {
+        if (!alertRef.current) return;
+        alertRef.current.style.transform = `translate(-50%, ${
+          isTop ? "100px" : "-144px"
+        }) scale(1)`;
+      }, delay);
 
       setTimeout(() => {
         if (!alertRef.current) return;
         alertRef.current.style.transform = `translate(-50%, ${
           isTop ? "-50px" : "50px"
         }) scale(0.4)`;
-      }, 3000);
+      }, 3000 + delay);
 
       const hideTimer = setTimeout(() => {
         setIsVisible(false);
-      }, 4000);
+      }, 4000 + delay);
 
       return () => clearTimeout(hideTimer);
     }
@@ -34,7 +37,7 @@ function GameAlert({ text, subText, isTop = false }: AlertProps) {
     <div
       ref={alertRef}
       className={`absolute transition-all px-16 py-10 left-1/2 flex-col ${
-        isTop ? "-top-[50px]" : "bottom-[-10px]"
+        isTop ? "-top-[100px]" : "bottom-[0px]"
       } bg-main-gray min-h-20 flex items-center justify-center mx-auto rounded-lg shadow-lg`}
     >
       {isTop && (

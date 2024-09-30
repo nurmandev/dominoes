@@ -1,12 +1,15 @@
-import mongoose, { Types, Document, Model, SchemaTypes } from 'mongoose';
-import { User } from './User.model';
+import mongoose, { Types, SchemaTypes } from 'mongoose';
 import { numberPair, TileClassSpec } from '../types';
 
 export interface Game {
   gameId: string;
   isPrivate: boolean;
   active: boolean;
-  players: User[];
+  players: {
+    user: Types.ObjectId;
+    score: number;
+    tiles: numberPair[];
+  }[];
   gameData: {
     player1Ready: boolean;
     player2Ready: boolean;
@@ -17,10 +20,7 @@ export interface Game {
     }[];
   };
   turn: 0 | 1;
-}
-
-export interface GameDocument extends Game, Document {
-  id: any;
+  winner?: Types.ObjectId | null;
 }
 
 const gameSchema = new mongoose.Schema<Game>(
@@ -32,8 +32,19 @@ const gameSchema = new mongoose.Schema<Game>(
     },
     players: [
       {
-        type: SchemaTypes.ObjectId,
-        ref: 'User',
+        user: {
+          type: SchemaTypes.ObjectId,
+          ref: 'User',
+          required: true,
+        },
+        score: {
+          type: Number,
+          default: 0, // Initialize score at 0
+        },
+        tiles: {
+          type: [[Number, Number]], // Array of domino tiles
+          default: [],
+        },
       },
     ],
     isPrivate: {
@@ -46,6 +57,8 @@ const gameSchema = new mongoose.Schema<Game>(
     },
     turn: {
       type: Number,
+      required: true,
+      default: 0,
     },
     gameData: {
       boneyard: {
@@ -60,7 +73,22 @@ const gameSchema = new mongoose.Schema<Game>(
         type: Boolean,
         default: false,
       },
-      gameboard: [{}],
+      gameboard: [
+        {
+          currentTile: {
+            type: SchemaTypes.Mixed,
+            required: true,
+          },
+          tileConnectedTo: {
+            type: SchemaTypes.Mixed,
+          },
+        },
+      ],
+    },
+    winner: {
+      type: SchemaTypes.ObjectId,
+      ref: 'User',
+      default: null, // Optional winner tracking
     },
   },
   { timestamps: true }

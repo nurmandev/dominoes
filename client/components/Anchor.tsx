@@ -19,7 +19,7 @@ function Anchor({
     top: coordinates[1],
     left: coordinates[0],
     transform: `scale(${scale}) rotate(${tilt}deg)`,
-    config: config.stiff,
+    config: config.gentle,
   });
   const [drop, setDrop] = useState(true);
   const [dropCount, setDropCount] = useState(0);

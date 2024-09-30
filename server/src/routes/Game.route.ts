@@ -8,5 +8,6 @@ router.post('/create', authMiddleware, GameController.createRoom);
 router.post('/join', authMiddleware, GameController.joinRoom);
 router.get('/all', authMiddleware, GameController.getAllGames);
 router.get('/:slug', authMiddleware, GameController.getGame);
+router.get('/playerId/:gameId', authMiddleware, GameController.getPlayerId);
 
 export default router;

@@ -25,11 +25,12 @@ function RoomPage({ params }: { params: { slug: string } }) {
   const dropdownRef = useRef(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const playerId = useMemo(
-    () => game?.players.findIndex((player) => player._id === user?._id) ?? -1,
-    [game?.players]
+    () =>
+      game?.players.findIndex((player) => player.user._id === user?._id) ?? -1,
+    [game?.players, user?._id]
   );
   const isParticipating = game?.players.some(
-    (player) => player._id === user?._id
+    (player) => player.user._id === user?._id
   );
 
   const startCountdown = () => {
@@ -45,7 +46,6 @@ function RoomPage({ params }: { params: { slug: string } }) {
         }
         if (prevCount <= 1) {
           clearInterval(intervalId);
-          socket.emit("startGame", { gameId: params.slug, playerId });
           router.push(`/room/${params.slug}/game`);
           return 0;
         }
@@ -55,10 +55,10 @@ function RoomPage({ params }: { params: { slug: string } }) {
   };
 
   const handleReady = () => {
-    console.log("event emmieted", game?.players.length, !isParticipating);
-    if (game?.players.length === 1 && !isParticipating) {
+    console.log("event emmieted", game?.players?.length, !isParticipating);
+    if (game?.players?.length === 1 && !isParticipating) {
       socket?.emit("joinGame", { gameId: slug });
-    } else if (game?.players.length === 2) {
+    } else if (game?.players?.length === 2) {
       socket?.emit("ready", {
         gameId: slug,
         player: playerId,
@@ -75,7 +75,7 @@ function RoomPage({ params }: { params: { slug: string } }) {
     if (socket) {
       API.get(`/game/${slug}`)
         .then(({ data }) => {
-          if (!data.data || data.data.players.length === 0) {
+          if (!data.data || data?.data?.players?.length === 0) {
             return toast.error("Game not found");
           }
           setGame(data.data);
@@ -214,14 +214,14 @@ function RoomPage({ params }: { params: { slug: string } }) {
 
         <div className="pt-6">
           <h1 className="pt-5 font-bold font-poppins text-[2rem] text-nowrap sm:text-[2.5rem] xl:text-5xl">
-            {game.players.length} of 2 players,{" "}
+            {game?.players?.length} of 2 players,{" "}
             {countdown && player1Ready && player2Ready ? (
               <span className="pt-5 font-medium text-2xl sm:text-3xl md:text-4xl  text-nowrap block">
                 Game starts in {countdown}
               </span>
             ) : (
               <span className="pt-5 font-medium text-2xl sm:text-3xl md:text-4xl  text-nowrap block">
-                {game.players.length > 1
+                {game?.players?.length > 1
                   ? "Waiting for players to set ready..."
                   : "Waiting for players to join..."}
               </span>
@@ -232,7 +232,7 @@ function RoomPage({ params }: { params: { slug: string } }) {
         <div className="pt-11 flex gap-3 items-center">
           <button
             disabled={
-              (isParticipating && game.players.length < 2) ||
+              (isParticipating && game?.players?.length < 2) ||
               (playerId === 0 && player1Ready) ||
               (playerId === 1 && player2Ready)
             }
@@ -286,7 +286,7 @@ function RoomPage({ params }: { params: { slug: string } }) {
             <PlayerProfileCard
               isReady={i === 0 ? player1Ready : player2Ready}
               key={i}
-              player={player}
+              player={player.user}
             />
           ))}
         </div>

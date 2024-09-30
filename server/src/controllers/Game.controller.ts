@@ -8,11 +8,30 @@ const GameController = {
 
     const newGame = await Game.create({
       gameId,
-      players: [req.user?._id],
+      players: [{ user: req.user?._id, score: 0, tiles: [] }],
     });
-    const game = await newGame.populate('players');
+    const game = await newGame.populate({
+      path: 'players.user',
+      select: '-tiles',
+    });
 
     return SuccessResponse(res, game, 'Room created successfully', 201);
+  }),
+
+  getPlayerId: asyncHandler(async (req, res) => {
+    const { gameId } = req.params;
+    const userId: any = req.user?._id;
+
+    const game = await Game.findOne({ gameId });
+    if (!game || game.players.length === 0) {
+      return ServerError(res, 'Game not found');
+    }
+
+    const index = game?.players.findIndex(
+      (player) => player.user._id.toString() === userId.toString()
+    );
+
+    return SuccessResponse(res, index, 'Get Player index success', 201);
   }),
 
   joinRoom: asyncHandler(async (req, res) => {
@@ -24,7 +43,10 @@ const GameController = {
       return ServerError(res, 'Game not found');
     }
 
-    if (game.players.includes(userId)) {
+    const isPlayerInGame = game.players.some(
+      (player) => player.user.toString() === userId.toString()
+    );
+    if (isPlayerInGame) {
       return ServerError(res, 'Already in this game', 400);
     }
 
@@ -32,23 +54,33 @@ const GameController = {
       return ServerError(res, 'Room is already full');
     }
 
-    if (game.players[0] === userId.toString()) {
-      return ServerError(res, 'Already in this room');
+    game.players.push({
+      user: userId,
+      score: 0,
+      tiles: [],
+    });
+
+    if (game.players.length === 2) {
+      game.active = true;
     }
 
-    game.players.push(userId);
-    game.active = true;
     await game.save();
+    game = await game.populate({
+      path: 'players.user',
+      select: '-tiles',
+    });
 
-    game = await game.populate('players');
-
-    return SuccessResponse(res, game, 'Room join successfully');
+    return SuccessResponse(res, game, 'Room joined successfully');
   }),
 
   getGame: asyncHandler(async (req, res) => {
     const { slug } = req.params;
 
-    const game = await Game.findOne({ gameId: slug }).populate('players');
+    const game = await Game.findOne({ gameId: slug }).populate({
+      path: 'players.user',
+      select: '-tiles',
+    });
+
     if (!game) {
       return ServerError(res, 'Game not found', 400);
     }
@@ -59,10 +91,18 @@ const GameController = {
   getAllGames: asyncHandler(async (req, res) => {
     const games = await Game.find({
       'players.0': { $exists: true },
+      'players.1': { $exists: false },
       active: false,
-    }).populate('players');
+    }).populate({
+      path: 'players.user',
+      select: '-tiles',
+    });
 
-    return SuccessResponse(res, games, 'Rooms retrieved successfully');
+    return SuccessResponse(
+      res,
+      games,
+      'Rooms with one player retrieved successfully'
+    );
   }),
 };
 

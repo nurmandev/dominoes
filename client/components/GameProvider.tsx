@@ -14,6 +14,9 @@ import {
   boneYardDistSpecType,
   Game,
   PlayerId,
+  userWin,
+  GameOver,
+  ResumeGame,
 } from "@/types";
 import { useSocket } from "./SocketProvider";
 import { useParams, useRouter } from "next/navigation";
@@ -39,16 +42,18 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useCurrentUser();
 
   const playerId: PlayerId = useMemo(() => {
-    const index = game?.players.findIndex((player) => player._id === user?._id);
+    const index = game?.players.findIndex(
+      (player) => player.user._id === user?._id
+    );
     return index !== -1 ? (index as PlayerId) : (null as any);
   }, [game, user]);
 
   const [firstPlayer, setFirstPlayer] = useState(-2);
   const [permits, setPermits] = useState<number[]>([1, 2, 3, 4, 5, 6]);
   const [distCallback, setDistCallback] = useState<
-    ((position: numberPair) => tileType | undefined)[]
+    ((position: numberPair) => Promise<tileType | undefined>)[]
   >([]);
-  const boneYardTile = useRef<tileType[]>([]);
+  const distributeTile = useRef<tileType[]>([]);
   const [boneYardDistSpec, setBoneYardDistSpec] =
     useState<boneYardDistSpecType>({
       active: false,
@@ -61,8 +66,11 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
 
   const [isTurn, setIsTurn] = useState(false);
   const [canPlay, setCanPlay] = useState(false);
-  const [boneyard, setBoneyard] = useState<numberPair[]>([]);
   const [deck, setDeck] = useState<numberPair[]>([]);
+  const [playerWin, setPlayerWin] = useState<userWin | null>(null);
+  const [opponentWin, setOpponentWin] = useState<userWin | null>(null);
+  const [gameOver, setGameOver] = useState<GameOver | null>(null);
+  const [resumeGame, setResumeGame] = useState<ResumeGame | null>(null);
 
   const makeTile = (tiles: numberPair[]): tileType[] =>
     tiles.map((tile) => ({
@@ -71,8 +79,35 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
     }));
 
   const selectFromBoneYard = () => {
-    const index = Math.floor(Math.random() * boneYardTile.current.length);
-    return boneYardTile.current.splice(index, 1)[0];
+    const index = Math.floor(Math.random() * distributeTile.current.length);
+    console.log("here", index);
+    return distributeTile.current.splice(index, 1)[0];
+  };
+
+  const selectFromBoneYardServer = async (): Promise<tileType> => {
+    if (!socket) return { id: 0, tile: [0, 0] as numberPair };
+    return new Promise((resolve, reject) => {
+      socket.emit("pickFromBoneyard", { gameId: slug });
+
+      socket.on("pickedFromBoneyardResponse", ({ pickedTile }) => {
+        const tile = {
+          id: Number(`${pickedTile[0]}${pickedTile[1]}`),
+          tile: pickedTile,
+        };
+        console.log("tile", tile);
+        resolve(tile as unknown as tileType);
+      });
+
+      socket.on("pickedFromBoneyardError", (error) => {
+        toast.error(error);
+        reject(new Error(error));
+      });
+
+      // setTimeout(() => {
+      //   toast.error("Request timed out");
+      //   reject(new Error("Request timed out"));
+      // }, 5000);
+    });
   };
 
   const requestTile = (
@@ -81,18 +116,22 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
     required?: number[],
     amount?: number
   ) => {
-    setBoneYardDistSpec((prevObj) => ({
-      active: true,
-      distribute: false,
-      instant: instant,
-      drawAmount: instant && amount ? amount : 0,
-      required: required || null,
-      callbacks: [distCallback[callbackID]],
-    }));
+    setDistCallback((arr) => {
+      const requestSpec = {
+        active: true,
+        distribute: false,
+        instant: instant,
+        drawAmount: instant && amount ? amount : 0,
+        callbacks: [arr[callbackID]],
+      };
+      setBoneYardDistSpec((prevObj) => ({ ...prevObj, ...requestSpec }));
+
+      return arr;
+    });
   };
 
   const registerDistCallback = (
-    callback: (position: numberPair) => tileType | undefined
+    callback: (position: numberPair) => Promise<tileType | undefined>
   ) => {
     setDistCallback((prevArr) => [...prevArr, callback]);
     return distCallback.length;
@@ -107,24 +146,24 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
-    if (socket) {
-      API.get(`/game/${slug}`)
-        .then(({ data }) => {
-          if (!data.data || data.data.players.length === 0) {
-            return toast.error("Game not found");
-          }
-          setGame(data.data);
-        })
-        .catch((err) => {
-          toast.error("Game not found");
-          setTimeout(() => router.push("/"), 2000);
-        });
+    API.get(`/game/${slug}`)
+      .then(({ data }) => {
+        if (!data.data || data.data.players.length === 0) {
+          return toast.error("Game not found");
+        }
+        setGame(data.data);
+      })
+      .catch((err) => {
+        toast.error("Game not found");
+        setTimeout(() => router.push("/"), 2000);
+      });
+  }, [slug]);
 
-      socket.on("boneyard", ({ encryptedBoneyard, choices, isTurn }) => {
-        if (!boneYardTile.current.length) {
-          encryptedBoneyard && setBoneyard(encryptedBoneyard);
-          const userDeck = choices.map((i: number) => encryptedBoneyard[i]);
-          boneYardTile.current = makeTile(userDeck);
+  useEffect(() => {
+    if (socket) {
+      socket.on("boneyard", ({ choices: userDeck, isTurn }) => {
+        if (!distributeTile.current.length) {
+          distributeTile.current = makeTile(userDeck);
           setDeck(userDeck);
           setIsTurn(isTurn);
         }
@@ -153,10 +192,73 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
         }
       );
 
+      socket.on("gameWon", ({ tiles, points }) => {
+        setIsTurn(false);
+        setCanPlay(false);
+        const newTiles = tiles.map((tile: numberPair) => ({
+          id: Number(`${tile[0]}${tile[1]}`),
+          tile,
+        }));
+        setPlayerWin({ points, tiles: newTiles });
+        setFirstPlayer(-2);
+      });
+      socket.on("opponentWon", ({ tiles, points }) => {
+        setIsTurn(false);
+        setCanPlay(false);
+        const newTiles = tiles.map((tile: numberPair) => ({
+          id: Number(`${tile[0]}${tile[1]}`),
+          tile,
+        }));
+        setOpponentWin({ points, tiles: newTiles });
+        setFirstPlayer(-2);
+      });
+
+      socket.on("gameOver", ({ winner, loser, tiles, points, youWin }) => {
+        setIsTurn(false);
+        setCanPlay(false);
+        const newTiles = tiles.map((tile: numberPair) => ({
+          id: Number(`${tile[0]}${tile[1]}`),
+          tile,
+        }));
+        setGameOver({ winner, loser });
+        if (youWin) {
+          setPlayerWin({ points, tiles: newTiles });
+        } else {
+          setOpponentWin({ points, tiles: newTiles });
+        }
+        setFirstPlayer(-2);
+      });
+
+      // Handle resuming game (loading existing state)
+      socket.on(
+        "resumeGame",
+        ({
+          gameboard,
+          playerTiles,
+          isTurn,
+          boneyardCount,
+          opponentTilesCount,
+        }) => {
+          console.log("resuming game 1");
+          setResumeGame({
+            gameboard,
+            playerTiles: makeTile(playerTiles),
+            boneyardCount,
+            opponentTilesCount,
+            isTurn,
+          });
+          setIsTurn(isTurn);
+          setCanPlay(isTurn);
+          // Set other game state data like boneyard and gameboard here
+        }
+      );
+
       return () => {
         socket.off("boneyard");
         socket.off("opponentPlayed");
         socket.off("userPlayed");
+        socket.off("resumeGame");
+        socket.off("gameWon");
         socket.off("playerReady");
         socket.off("joinGameError");
       };
@@ -164,7 +266,7 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
   }, [socket, playerId]);
 
   useEffect(() => {
-    if (!boneYardTile.current.length) return;
+    if (!distributeTile.current.length) return;
 
     setDistCallback((arr) => {
       const requestSpec = {
@@ -178,7 +280,7 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
 
       return arr;
     });
-  }, [boneYardTile.current, distCallback]);
+  }, [distributeTile.current, distCallback]);
 
   return (
     <GameContext.Provider
@@ -186,13 +288,19 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
         draggedTile,
         setDraggedTile,
         recentlyDroppedTile,
+        gameOver,
+        resumeGame,
+        setResumeGame,
         selectFromBoneYard,
+        selectFromBoneYardServer,
         deck,
         boneYardDistSpec,
         setBoneYardDistSpec,
         setDeck,
         permits,
         setPermits,
+        playerWin,
+        opponentWin,
         isTurn,
         setIsTurn,
         registerDistCallback,

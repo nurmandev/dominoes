@@ -1,3 +1,5 @@
+/* eslint-disable no-confusing-arrow */
+import { Game } from '../models/Game.model';
 import { numberPair } from '../types';
 
 export const generateRandomCharacters = (length = 6) => {
@@ -38,4 +40,21 @@ export const findLargestDouble = (pair: numberPair[]) => {
     const sum = current[0] + current[1];
     return current[0] === current[1] && sum > max ? sum : max;
   }, -Infinity);
+};
+
+export const checkForWin = (game: Game, playerId: number): boolean => {
+  const playerTiles =
+    playerId === 0 ? game.players[0].tiles : game.players[1].tiles;
+  return playerTiles.length === 0;
+};
+
+export const calculateOpponentTilesValue = (
+  game: Game,
+  playerId: number
+): number => {
+  const opponentId = playerId === 0 ? 1 : 0;
+  const opponentTiles = game.players[opponentId].tiles;
+
+  // Sum the remaining pip values of opponent's tiles
+  return opponentTiles.reduce((sum, tile) => sum + tile[0] + tile[1], 0);
 };

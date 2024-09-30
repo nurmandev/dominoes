@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import DeckTile from "./DeckTile";
 import {
@@ -11,14 +11,31 @@ import {
 } from "@react-spring/web";
 import { useGameContext } from "./GameProvider";
 import useDistributor, { requestType } from "@/hooks/useDistributor";
-import { tileType } from "@/types";
+import { numberPair, tileType } from "@/types";
+import { TileAlignSpec } from "@/utils/game-utils";
 
-function PlayerDeck() {
-  const { canPlay, draggedTile } = useGameContext();
-  const [hand, setHand, from, boundRef, requestTile] = useDistributor(
+interface PlayerDeckProps {
+  anchors: TileAlignSpec[];
+}
+
+const PlayerDeck: React.FC<PlayerDeckProps> = ({ anchors }) => {
+  const {
+    canPlay,
+    draggedTile,
+    isTurn,
+    setBoneYardDistSpec,
+    opponentWin,
+    playerWin,
+    resumeGame,
+  } = useGameContext();
+  const [hand, setHand, from, boundRef, tileRequestApi] = useDistributor(
     requestType.MAIN_DECK
   );
-  const canPlayStyles = canPlay ? "" : "opacity-80 pointer-events-none";
+  const [revealed, setRevealed] = useState(false);
+  const [points, setPoints] = useState(0);
+  const [transform, setTransform] = useState("");
+
+  const canPlayStyles = canPlay ? "" : "opacity-80 pointer-events-none ";
 
   const springRef = useSpringRef();
   const springProp = useSpring({
@@ -49,6 +66,71 @@ function PlayerDeck() {
     setHand((prevArr: tileType[]) => prevArr.filter((tile) => tile.id !== id));
   };
 
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (anchors.length > 0) {
+        if (isTurn && canPlay && !checkPlayerDeckMatches(hand, anchors)) {
+          tileRequestApi();
+        } else {
+          setBoneYardDistSpec({
+            active: false,
+            distribute: false,
+            instant: false,
+            drawAmount: 0,
+            required: [],
+            callbacks: [],
+          });
+        }
+      }
+    }, 1000);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [anchors, hand, isTurn]);
+
+  useEffect(() => {
+    if (opponentWin) {
+      setTimeout(() => {
+        setRevealed(true);
+        setTransform(`translate(0px, -100px)`);
+      }, 1000);
+      setTimeout(() => {
+        setTransform(`translate(0px, -500px)`);
+        setHand([]);
+      }, 5000);
+      setTimeout(() => {
+        setTransform(`translate(0px,0px)`);
+        setRevealed(false);
+      }, 5500);
+    }
+  }, [opponentWin]);
+
+  useEffect(() => {
+    if (playerWin) {
+      setPoints((prev) => prev + playerWin.points);
+    }
+  }, [playerWin]);
+
+  useEffect(() => {
+    if (!resumeGame) return;
+    setHand(resumeGame?.playerTiles);
+  }, [resumeGame]);
+
+  function checkPlayerDeckMatches(
+    playerDeck: tileType[],
+    anchors: TileAlignSpec[]
+  ): boolean {
+    for (const deckTile of playerDeck) {
+      for (const anchor of anchors) {
+        if (anchor.canAccept.some((i) => deckTile.tile.includes(i))) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   return (
     <div
       id="current-player"
@@ -73,18 +155,24 @@ function PlayerDeck() {
         className={`absolute flex left-[50%] translate-x-[-50%] items-center self-end gap-1 h-[120px] ${canPlayStyles}`}
       >
         {transitions((style, tile) => (
-          <animated.div key={tile.id} style={style}>
+          <animated.div
+            key={tile?.id}
+            style={{
+              ...style,
+              transform: revealed ? transform : style.transform,
+            }}
+          >
             <DeckTile {...{ tile, onDropComplete }} />
           </animated.div>
         ))}
       </animated.div>
 
       <div className="text-center">
-        <p>0</p>
+        <p>{points}</p>
         <p className="text-xs text-[#afb7c1]">points</p>
       </div>
     </div>
   );
-}
+};
 
 export default PlayerDeck;

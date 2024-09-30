@@ -3,6 +3,7 @@ import DominoesTile from "./DominoesTile";
 import { animated, config, useTransition } from "@react-spring/web";
 import { useGameContext } from "./GameProvider";
 import { numberPair } from "@/types";
+import { useSocket } from "./SocketProvider";
 
 function BoneYard() {
   const {
@@ -14,8 +15,11 @@ function BoneYard() {
     setCanPlay,
     setBoneYardDistSpec,
     setFirstPlayer,
-    setPermits,
+    opponentWin,
+    playerWin,
+    resumeGame,
   } = useGameContext();
+  const { socket } = useSocket();
   const gridRef = useRef<HTMLDivElement | null>(null);
   const complete = useRef(0);
 
@@ -61,36 +65,67 @@ function BoneYard() {
                   setFirstPlayer(isTurn ? playerId : playerId === 0 ? 1 : 0);
                 }
                 setCanPlay(true);
-                setPermits([19, 10]);
+                complete.current = 0;
               }
             }
           };
           retrace();
         }, 1000 + i * (1000 / boneYardDistSpec.callbacks.length));
       }
+    } else if (boneYardDistSpec.instant && deck) {
+      const randomTileRect = selectRandomTile();
+      if (randomTileRect) boneYardDistSpec.callbacks[0](randomTileRect);
+      else console.log("Couldn't pick a tile");
+      const timeoutId = setTimeout(() => {
+        setBoneYardDistSpec({
+          active: false,
+          distribute: false,
+          instant: false,
+          drawAmount: 0,
+          required: [],
+          callbacks: [],
+        });
+      }, 1000);
+
+      return () => {
+        clearTimeout(timeoutId);
+      };
     }
   }, [boneYardDistSpec]);
 
-  const handleSelectTile = (
+  useEffect(() => {
+    setTiles(Array.from({ length: 28 }, () => "unpicked"));
+  }, [playerWin, opponentWin]);
+
+  useEffect(() => {
+    if (!resumeGame) return;
+
+    const { boneyardCount } = resumeGame;
+    const totalTiles = 28;
+
+    let newTiles = Array.from({ length: totalTiles }, () => "unpicked");
+
+    const pickedIndices = new Set<number>();
+
+    while (pickedIndices.size < totalTiles - boneyardCount) {
+      pickedIndices.add(Math.floor(Math.random() * totalTiles));
+    }
+
+    pickedIndices.forEach((index) => {
+      newTiles[index] = "picked";
+    });
+
+    setTiles(newTiles);
+  }, [resumeGame]);
+
+  const handleSelectTile = async (
     e: React.MouseEvent<HTMLDivElement, MouseEvent>,
     index: number
   ) => {
     const target = e.target as HTMLElement;
     const rect = target.getBoundingClientRect();
-    const pickedTile = boneYardDistSpec.callbacks[0]([rect.x, rect.y]);
-    if (
-      pickedTile?.tile.some((item) => boneYardDistSpec.required?.includes(item))
-    ) {
-      setBoneYardDistSpec({
-        active: false,
-        distribute: false,
-        instant: false,
-        drawAmount: 0,
-        required: [],
-        callbacks: [],
-      });
-    }
     setTiles((tile) => tile.map((item, i) => (i === index ? "picked" : item)));
+    await boneYardDistSpec.callbacks[0]([rect.x, rect.y], false);
   };
 
   const selectRandomTile = () => {

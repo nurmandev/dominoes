@@ -12,6 +12,7 @@ export default function useDistributor(
   const callbackID = useRef<number | null>(0);
   const {
     selectFromBoneYard,
+    selectFromBoneYardServer,
     registerDistCallback,
     unRegisterDistCallback,
     requestTile,
@@ -19,10 +20,11 @@ export default function useDistributor(
   } = useGameContext();
 
   useEffect(() => {
-    const distCallback = (position: numberPair) => {
+    const distCallback = async (position: numberPair, distribute = true) => {
       if (boundRef.current) {
         const bounds = boundRef.current.getBoundingClientRect();
         counterRef.current++;
+        console.log(deckType);
         if (deckType === requestType.OPPONENT_DECK) {
           const newHand = { id: 0, tile: [0, 0] as numberPair };
           setHand((prevArr) => [...prevArr, newHand]);
@@ -32,7 +34,13 @@ export default function useDistributor(
           ]);
           return newHand;
         } else {
-          const newHand = selectFromBoneYard();
+          var newHand: tileType;
+          if (distribute) {
+            newHand = selectFromBoneYard();
+          } else {
+            newHand = await selectFromBoneYardServer();
+          }
+          console.log(newHand);
           setHand((preArr) => [...preArr, newHand]);
           setFrom([bounds.right - position[0], bounds.top - position[1]]);
           return newHand;
@@ -44,13 +52,13 @@ export default function useDistributor(
   }, []);
 
   const tileRequestApi = (amount?: number) => {
-    if (callbackID.current) {
-      if (deckType === requestType.MAIN_DECK) {
-        requestTile(false, callbackID.current, permits);
-      } else {
-        requestTile(true, callbackID.current, [], amount);
-      }
+    // if (callbackID.current) {
+    if (deckType === requestType.MAIN_DECK) {
+      requestTile(false, (callbackID.current! + 1) as number, permits);
+    } else {
+      requestTile(true, callbackID.current as number, [], amount);
     }
+    // }
   };
   return [hand, setHand, from, boundRef, tileRequestApi];
 }

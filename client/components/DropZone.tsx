@@ -6,7 +6,6 @@ import { useGameContext } from "./GameProvider";
 function DropZone({
   position,
   initailSetAnchor,
-  activeHover,
   id,
   scale,
   registerDrop,
@@ -17,22 +16,19 @@ function DropZone({
     opponentPlay,
     oppenentPullFrom,
     setOpponentPlay,
+    setIsTurn,
   } = useGameContext();
 
   const bind = useHover(({ xy: [x, y], hovering }) => {
     if (hovering) {
-      activeHover.current = activeHover.current || id;
-
-      if (draggedTile && activeHover.current === id) {
+      if (draggedTile) {
         recentlyDroppedTile.current = draggedTile;
         registerDrop(1);
-
+        console.log("hello");
         initailSetAnchor(draggedTile, [x, y], id);
-        activeHover.current = null;
+        setIsTurn(false);
       }
-    } else
-      activeHover.current =
-        activeHover.current === id ? null : activeHover.current;
+    }
   });
 
   useEffect(() => {

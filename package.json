@@ -7,7 +7,13 @@
   "license": "MIT",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "install": "concurrently \"npm run dev:server-install\" \"npm run dev:client-install\"",
     "dev:client": "cd client && npm run dev",
-    "dev:server": "cd server && npm run dev"
+    "dev:server": "cd server && npm run dev",
+    "dev:client-install": "cd client && npm install",
+    "dev:server-install": "cd server && npm install"
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
   }
 }

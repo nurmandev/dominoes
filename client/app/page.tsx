@@ -66,6 +66,11 @@ export default function Home() {
       socket.on("newGameCreated", ({ game }) => {
         setGames((prevGames) => [game, ...prevGames]);
       });
+      socket.on("gameUpdated", ({ game }) => {
+        setGames((prevGames) =>
+          prevGames.filter((prevGame) => prevGame.gameId !== game.gameId)
+        );
+      });
       socket.on("createGameError", () => {
         toast.error("An error occurred while creating a game");
       });
